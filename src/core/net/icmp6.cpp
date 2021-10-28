@@ -179,8 +179,10 @@ Error Icmp::HandleEchoRequest(Message &aRequestMessage, const MessageInfo &aMess
     MessageInfo replyMessageInfo;
     uint16_t    payloadLength;
 
-    // always handle Echo Request destined for RLOC or ALOC
-    VerifyOrExit(ShouldHandleEchoRequest(aMessageInfo) || aMessageInfo.GetSockAddr().GetIid().IsLocator());
+    // always handle Echo Request destined for RLOC or ALOC and destined for subscribed unicast and multicast addresses
+    VerifyOrExit(ShouldHandleEchoRequest(aMessageInfo) || aMessageInfo.GetSockAddr().GetIid().IsLocator() ||
+                 Get<ThreadNetif>().IsMulticastSubscribed(aMessageInfo.GetSockAddr()) ||
+                 Get<ThreadNetif>().HasUnicastAddress(aMessageInfo.GetSockAddr()));
 
     otLogInfoIcmp("Received Echo Request");
 
