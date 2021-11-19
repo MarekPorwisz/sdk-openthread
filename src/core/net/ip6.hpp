@@ -325,7 +325,6 @@ private:
     Error ProcessReceiveCallback(Message &          aMessage,
                                  const MessageInfo &aMessageInfo,
                                  uint8_t            aIpProto,
-                                 bool               aFromNcpHost,
                                  bool               aAllowReceiveFilter,
                                  Message::Ownership aMessageOwnership);
     Error HandleExtensionHeaders(Message &    aMessage,
@@ -354,7 +353,7 @@ private:
                         MessageInfo &      aMessageInfo,
                         uint8_t            aIpProto,
                         Message::Ownership aMessageOwnership);
-    bool  ShouldForwardToThread(const MessageInfo &aMessageInfo, bool aFromNcpHost) const;
+    bool  ShouldForwardToThread(const MessageInfo &aMessageInfo) const;
     bool  IsOnLink(const Address &aAddress) const;
 
     bool                 mForwardingEnabled;

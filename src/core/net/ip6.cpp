@@ -911,7 +911,7 @@ Error Ip6::HandleExtensionHeaders(Message &    aMessage,
 
         case kProtoFragment:
             // Always forward IPv6 fragments to the Host.
-            IgnoreError(ProcessReceiveCallback(aMessage, aMessageInfo, aNextHeader, aFromNcpHost,
+            IgnoreError(ProcessReceiveCallback(aMessage, aMessageInfo, aNextHeader,
                                                /* aAllowReceiveFilter */ false, Message::kCopyToUse));
 
             SuccessOrExit(error = HandleFragment(aMessage, aNetif, aMessageInfo, aFromNcpHost));
@@ -1000,14 +1000,12 @@ exit:
 Error Ip6::ProcessReceiveCallback(Message &          aMessage,
                                   const MessageInfo &aMessageInfo,
                                   uint8_t            aIpProto,
-                                  bool               aFromNcpHost,
                                   bool               aAllowReceiveFilter,
                                   Message::Ownership aMessageOwnership)
 {
     Error    error   = kErrorNone;
     Message *message = &aMessage;
 
-    VerifyOrExit(!aFromNcpHost, error = kErrorNoRoute);
     VerifyOrExit(mReceiveIp6DatagramCallback != nullptr, error = kErrorNoRoute);
 
     // Do not forward reassembled IPv6 packets.
@@ -1192,7 +1190,7 @@ start:
             forwardThread = true;
         }
 
-        if (forwardThread && !ShouldForwardToThread(messageInfo, aFromNcpHost))
+        if (forwardThread && !ShouldForwardToThread(messageInfo))
         {
             forwardThread = false;
             forwardHost   = true;
@@ -1233,7 +1231,7 @@ start:
         }
 #endif
 
-        error = ProcessReceiveCallback(aMessage, messageInfo, nextHeader, aFromNcpHost,
+        error = ProcessReceiveCallback(aMessage, messageInfo, nextHeader,
                                        /* aAllowReceiveFilter */ !forwardHost, Message::kCopyToUse);
 
         if ((error == kErrorNone || error == kErrorNoRoute) && forwardHost)
@@ -1249,7 +1247,7 @@ start:
     if (forwardHost)
     {
         // try passing to host
-        error = ProcessReceiveCallback(aMessage, messageInfo, nextHeader, aFromNcpHost, /* aAllowReceiveFilter */ false,
+        error             = ProcessReceiveCallback(aMessage, messageInfo, nextHeader, /* aAllowReceiveFilter */ false,
                                        forwardThread ? Message::kCopyToUse : Message::kTakeCustody);
         shouldFreeMessage = forwardThread;
     }
@@ -1338,10 +1336,8 @@ exit:
     return error;
 }
 
-bool Ip6::ShouldForwardToThread(const MessageInfo &aMessageInfo, bool aFromNcpHost) const
+bool Ip6::ShouldForwardToThread(const MessageInfo &aMessageInfo) const
 {
-    OT_UNUSED_VARIABLE(aFromNcpHost);
-
     bool rval = false;
 
     if (aMessageInfo.GetSockAddr().IsMulticast())
@@ -1358,8 +1354,7 @@ bool Ip6::ShouldForwardToThread(const MessageInfo &aMessageInfo, bool aFromNcpHo
     {
         // on-link global address
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BACKBONE_ROUTER_DUA_NDPROXYING_ENABLE
-        ExitNow(rval = (aFromNcpHost ||
-                        !Get<BackboneRouter::Manager>().ShouldForwardDuaToBackbone(aMessageInfo.GetSockAddr())));
+        ExitNow(rval = !Get<BackboneRouter::Manager>().ShouldForwardDuaToBackbone(aMessageInfo.GetSockAddr()));
 #else
         ExitNow(rval = true);
 #endif
