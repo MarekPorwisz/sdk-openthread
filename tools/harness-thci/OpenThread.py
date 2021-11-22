@@ -325,7 +325,7 @@ class OpenThreadTHCI(object):
             expected    str: the expected string
             times       int: number of tries
         """
-        print('[%s] Expecting [%s]' % (self, expected))
+        self.log('Expecting [%s]' % (expected))
 
         deadline = time.time() + timeout
         while True:
@@ -342,7 +342,7 @@ class OpenThreadTHCI(object):
 
             matched = line.endswith(expected) if endswith else line == expected
             if matched:
-                print('[%s] Expected [%s]' % (self, expected))
+                self.log('Expected [%s]' % (expected))
                 return
 
         raise Exception('failed to find expected string[%s]' % expected)
@@ -421,7 +421,8 @@ class OpenThreadTHCI(object):
 
         # init serial port
         self._connect()
-        self.__detectZephyr()
+        if not self.IsBorderRouter:
+            self.__detectZephyr()
         if TESTHARNESS_VERSION == TESTHARNESS_1_2:
             self.__discoverDeviceCapability()
         self.UIStatusMsg = self.getVersionNumber()
@@ -1412,7 +1413,9 @@ class OpenThreadTHCI(object):
         """
         print('%s call resetAndRejoin' % self)
         try:
-            self.reset_and_wait_for_connection(timeout=timeout)
+            self.powerDown()
+            time.sleep(timeout)
+            self.powerUp()
             self.__startOpenThread()
             return self.wait_for_attach_to_the_network(expected_role="", timeout=self.NETWORK_ATTACHMENT_TIMEOUT)
         except Exception as e:
@@ -1786,8 +1789,7 @@ class OpenThreadTHCI(object):
             P_Prefix = '%016x' % P_Prefix
         else:
             # TestHarness 1.1 converts 2001000000000000 to "2001000000000000" (it's wrong, but not fixed yet.)
-            P_Prefix = str(P_Prefix)
-            int(P_Prefix, 16)
+            P_Prefix = '%016x' % P_Prefix
 
         prefix = self.__convertIp6PrefixStringToIp6Address(P_Prefix)
         print(prefix)
@@ -3602,6 +3604,11 @@ class OpenThreadTHCI(object):
 
         return s
 
+    @API
+    def setCcmState(self, state=0):
+        assert state in (0, 1), state
+        self.__executeCommand("ccm {}".format("enable" if state == 1 else "disable"))
+
 
 class OpenThread(OpenThreadTHCI, IThci):
 
@@ -3619,7 +3626,7 @@ class OpenThread(OpenThreadTHCI, IThci):
             for _ in range(int(timeout / 0.5)):
                 time.sleep(0.5)
                 try:
-                    self.__handle = serial.Serial(self.port, 115200, timeout=0)
+                    self.__handle = serial.Serial(self.port, 115200, timeout=0, write_timeout=1)
                     self.sleep(1)
                     self.__handle.write('\r\n')
                     self.sleep(0.1)

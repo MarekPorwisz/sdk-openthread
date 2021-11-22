@@ -429,6 +429,7 @@ HEADERS_COMMON                                  = \
     common/error.hpp                              \
     common/extension.hpp                          \
     common/heap.hpp                               \
+    common/heap_allocatable.hpp                   \
     common/heap_data.hpp                          \
     common/heap_string.hpp                        \
     common/instance.hpp                           \
@@ -442,9 +443,11 @@ HEADERS_COMMON                                  = \
     common/non_copyable.hpp                       \
     common/notifier.hpp                           \
     common/numeric_limits.hpp                     \
+    common/owned_ptr.hpp                          \
     common/pool.hpp                               \
     common/random.hpp                             \
     common/random_manager.hpp                     \
+    common/retain_ptr.hpp                         \
     common/settings.hpp                           \
     common/settings_driver.hpp                    \
     common/string.hpp                             \
