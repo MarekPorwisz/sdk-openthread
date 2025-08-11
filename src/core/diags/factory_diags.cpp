@@ -201,12 +201,11 @@ Diags::Diags(Instance &aInstance)
     , mTxPacket(&Get<Radio>().GetTransmitBuffer())
     , mTxPeriod(0)
     , mTxPackets(0)
+    , mTxState(kTransmitNone)
     , mChannel(20)
     , mTxPower(0)
     , mTxLen(0)
     , mIsTxPacketSet(false)
-    , mIsAsyncSend(false)
-    , mRepeatActive(false)
     , mDiagSendOn(false)
     , mOutputCallback(nullptr)
     , mOutputContext(nullptr)
@@ -243,6 +242,9 @@ Error Diags::ProcessFrame(uint8_t aArgsLength, char *aArgs[])
     uint8_t  rxChannelAfterTxDone = mChannel;
     uint32_t txDelayBaseTime      = 0;
     uint32_t txDelay              = 0;
+
+    /* Don't allow frame modification during ongoing transmission. */
+    VerifyOrExit(IsTxIdle(), error = kErrorInvalidState);
 
     while (aArgsLength > 1)
     {
@@ -337,6 +339,9 @@ Error Diags::ProcessChannel(uint8_t aArgsLength, char *aArgs[])
 {
     Error error = kErrorNone;
 
+    /* Don't allow channel modification during ongoing transmission. */
+    VerifyOrExit(IsTxIdle(), error = kErrorInvalidState);
+
     if (aArgsLength == 0)
     {
         Output("%u\r\n", mChannel);
@@ -388,13 +393,17 @@ Error Diags::ProcessRepeat(uint8_t aArgsLength, char *aArgs[])
 
     if (StringMatch(aArgs[0], "stop"))
     {
+        VerifyOrExit(mTxState == kTransmitRepeat, error = kErrorInvalidState);
         otPlatAlarmMilliStop(&GetInstance());
-        mRepeatActive = false;
+        mTxState = kTransmitNone;
     }
     else
     {
         uint32_t txPeriod;
         uint8_t  txLength;
+
+        /* Don't allow scheduling transmission if another one is active. */
+        VerifyOrExit(IsTxIdle(), error = kErrorInvalidState);
 
         VerifyOrExit(aArgsLength >= 1, error = kErrorInvalidArgs);
 
@@ -419,7 +428,7 @@ Error Diags::ProcessRepeat(uint8_t aArgsLength, char *aArgs[])
                      error = kErrorInvalidArgs);
         mTxLen = txLength;
 
-        mRepeatActive = true;
+        mTxState = kTransmitRepeat;
         uint32_t now  = otPlatAlarmMilliGetNow();
         otPlatAlarmMilliStartAt(&GetInstance(), now, mTxPeriod);
     }
@@ -433,7 +442,9 @@ Error Diags::ProcessSend(uint8_t aArgsLength, char *aArgs[])
     Error    error = kErrorNone;
     uint32_t txPackets;
     uint8_t  txLength;
+    bool     async = false;
 
+    VerifyOrExit(IsTxIdle(), error = kErrorInvalidState);
     VerifyOrExit(aArgsLength >= 1, error = kErrorInvalidArgs);
 
     if (StringMatch(aArgs[0], "async"))
@@ -441,11 +452,7 @@ Error Diags::ProcessSend(uint8_t aArgsLength, char *aArgs[])
         aArgs++;
         aArgsLength--;
         VerifyOrExit(aArgsLength >= 1, error = kErrorInvalidArgs);
-        mIsAsyncSend = true;
-    }
-    else
-    {
-        mIsAsyncSend = false;
+        async = true;
     }
 
     SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint32(aArgs[0], txPackets));
@@ -469,9 +476,18 @@ Error Diags::ProcessSend(uint8_t aArgsLength, char *aArgs[])
     VerifyOrExit(txLength >= OT_RADIO_FRAME_MIN_SIZE, error = kErrorInvalidArgs);
     mTxLen = txLength;
 
-    SuccessOrExit(error = TransmitPacket());
+    if (async)
+    {
+        mTxState = kTransmitSendAsync;
+    }
+    else
+    {
+        mTxState = kTransmitSend;
+    }
 
-    if (!mIsAsyncSend)
+    VerifyOrExit(error = TransmitPacket(), mTxState = kTransmitNone);
+
+    if (!async)
     {
         error = kErrorPending;
     }
@@ -775,7 +791,7 @@ extern "C" void otPlatDiagAlarmFired(otInstance *aInstance) { AsCoreType(aInstan
 
 void Diags::AlarmFired(void)
 {
-    if (mRepeatActive)
+    if (mTxState == kTransmitRepeat)
     {
         uint32_t now = otPlatAlarmMilliGetNow();
 
@@ -862,8 +878,11 @@ exit:
 
 void Diags::TransmitDone(Error aError)
 {
+    bool complete = true;
+
     VerifyOrExit(mDiagSendOn);
     mDiagSendOn = false;
+    
 
     switch (aError)
     {
@@ -884,21 +903,24 @@ void Diags::TransmitDone(Error aError)
         break;
     }
 
-    VerifyOrExit(!mRepeatActive && (mTxPackets > 0));
+    VerifyOrExit(mTxState == kTransmitSend || mTxState == kTransmitSendAsync);
 
     if (mTxPackets > 1)
     {
         mTxPackets--;
-        IgnoreError(TransmitPacket());
+        // complete on tx request error as another TransmitDone won't be called
+        complete = (TransmitPacket() != kErrorNone); 
     }
-    else
+
+    if (complete)
     {
         mTxPackets = 0;
 
-        if (!mIsAsyncSend)
+        if (mTxState == kTransmitSend)
         {
             Output("OT_ERROR_NONE");
         }
+        mTxState = kTransmitNone;
     }
 
 exit:

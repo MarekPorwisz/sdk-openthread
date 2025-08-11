@@ -133,6 +133,15 @@ public:
 private:
     static constexpr uint8_t kMaxArgs = OPENTHREAD_CONFIG_DIAG_CMD_LINE_ARGS_MAX;
 
+    enum TransmitState
+    {
+        kTransmitNone,
+        kTransmitRepeat,
+        kTransmitSend,
+        kTransmitSendAsync,
+        kTransmitCount
+    };
+
     struct Command
     {
         const char *mName;
@@ -254,21 +263,23 @@ private:
     static const struct Command sCommands[];
 
 #if OPENTHREAD_FTD || OPENTHREAD_MTD || (OPENTHREAD_RADIO && OPENTHREAD_RADIO_CLI)
+    bool IsTxIdle(void) { return mTxState == kTransmitNone; }
+    
     Stats mStats;
 
     otRadioFrame *mTxPacket;
     uint32_t      mTxPeriod;
     uint32_t      mTxPackets;
+    TransmitState mTxState;
     uint8_t       mChannel;
     int8_t        mTxPower;
     uint8_t       mTxLen;
     bool          mIsHeaderUpdated : 1;
     bool          mIsTxPacketSet : 1;
-    bool          mIsAsyncSend : 1;
-    bool          mRepeatActive : 1;
     bool          mDiagSendOn : 1;
 #endif
 
+    
     ReceiveConfig        mReceiveConfig;
     otDiagOutputCallback mOutputCallback;
     void                *mOutputContext;
